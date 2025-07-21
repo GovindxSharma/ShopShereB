@@ -7,8 +7,8 @@ export const createOrUpdateReview = async (req: Request, res: Response) => {
   try {
     const { rating, comment, productId } = req.body
 
-    const userId = req.user._id
-    const userName = req.user.name
+    const userId = (req.user as any)._id
+    const userName = (req.user as any).name
 
     if (!mongoose.Types.ObjectId.isValid(productId)) {
       return res.status(400).json({ message: "Invalid product ID" })
@@ -24,11 +24,9 @@ export const createOrUpdateReview = async (req: Request, res: Response) => {
     )
 
     if (existingReviewIndex !== -1) {
-      // ✅ Update review
       product.reviews[existingReviewIndex].rating = rating
       product.reviews[existingReviewIndex].comment = comment
     } else {
-      // ✅ Create new review
       product.reviews.push({
         user: userId,
         name: userName,
@@ -38,7 +36,6 @@ export const createOrUpdateReview = async (req: Request, res: Response) => {
       product.numOfReviews = product.reviews.length
     }
 
-    // ✅ Recalculate average rating
     const avg =
       product.reviews.reduce((acc, item) => acc + item.rating, 0) /
       product.reviews.length
@@ -58,7 +55,7 @@ export const createOrUpdateReview = async (req: Request, res: Response) => {
 export const deleteReview = async (req: Request, res: Response) => {
   try {
     const { productId } = req.query
-    const userId = req.user._id
+    const userId = (req.user as any)._id
 
     const product = await Product.findById(productId)
     if (!product) {
@@ -86,13 +83,16 @@ export const deleteReview = async (req: Request, res: Response) => {
   }
 }
 
-// ✅ Get all reviews for a product (Admin or frontend use)
+// ✅ Get all reviews for a product
 export const getProductReviews = async (req: Request, res: Response) => {
   try {
     const { productId } = req.params
-    console.log(productId,"TEST");
-    
-    const product = await Product.findById(productId).populate("reviews.user", "name email")
+
+    const product = await Product.findById(productId).populate(
+      "reviews.user",
+      "name email"
+    )
+
     if (!product) {
       return res.status(404).json({ message: "Product not found" })
     }

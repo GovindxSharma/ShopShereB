@@ -1,12 +1,15 @@
 import { Request, Response } from "express"
 import Order from "../models/order.model"
 import crypto from "crypto"
-import Cart from '../models/cart.model'
-import Product from '../models/product.model'
+import Cart from "../models/cart.model"
+import Product from "../models/product.model"
 
-// 🧾 Create Order
 // 🧾 Create Order and Clear Cart
 export const createOrder = async (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ message: "Login/Register required" })
+  }
+
   try {
     const {
       items,
@@ -43,6 +46,10 @@ export const createOrder = async (req: Request, res: Response) => {
 
 // 👤 Get User Orders
 export const getUserOrders = async (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ message: "Login/Register required" })
+  }
+
   try {
     const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 })
     res.json(orders)
@@ -70,6 +77,7 @@ export const getAllOrders = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to fetch all orders", error: error.message })
   }
 }
+
 // 👑 Admin: Get Order by ID
 export const getOrderById = async (req: Request, res: Response) => {
   try {
@@ -87,7 +95,6 @@ export const getOrderById = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to fetch order details", error: error.message })
   }
 }
-
 
 // ✅ Mark Order as Delivered
 export const markAsDelivered = async (req: Request, res: Response) => {
@@ -122,7 +129,6 @@ export const getAnalytics = async (_req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to get analytics", error: error.message })
   }
 }
-
 
 // 💳 Razorpay: Verify Payment Signature & Update Order
 export const verifyPayment = async (req: Request, res: Response) => {
@@ -172,4 +178,3 @@ export const verifyPayment = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: "Payment verification failed", error: error.message })
   }
 }
-

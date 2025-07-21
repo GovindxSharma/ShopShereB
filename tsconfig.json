@@ -1,14 +1,14 @@
 {
   "compilerOptions": {
-    "target": "ES2020",                       // Modern JavaScript output
-    "module": "CommonJS",                     // Required for Node.js
-    "outDir": "dist",                         // Compiled output
-    "rootDir": "src",                         // Source TypeScript files
-    "strict": true,                           // Enable all strict type checking
-    "esModuleInterop": true,                  // Allow CommonJS imports (e.g., express, dotenv)
-    "forceConsistentCasingInFileNames": true, // Prevent casing mismatches
-    "skipLibCheck": true                      // Speeds up builds by skipping type checks on lib files
+    "target": "ES2020",
+    "module": "CommonJS",
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "types/**/*"],
   "exclude": ["node_modules", "dist"]
 }

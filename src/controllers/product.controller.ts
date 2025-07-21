@@ -1,6 +1,8 @@
 import { Request, Response } from "express"
 import Product from "../models/product.model"
+import cloudinary from "../utils/cloudinary"
 
+// 📦 GET: All Products (Public)
 export const getAllProducts = async (req: Request, res: Response) => {
   try {
     const {
@@ -10,37 +12,45 @@ export const getAllProducts = async (req: Request, res: Response) => {
       ratings,
       price,
       search,
-    } = req.query;
-
-    const filter: any = {};
-
-    if (category && category !== "All") filter.category = category;
-    if (ratings && Number(ratings) > 0)
-      filter.ratings = { $gte: Number(ratings) };
-    if (price && Number(price) > 0)
-      filter.price = { $lte: Number(price) };
-
-    if (search) {
-      filter.name = { $regex: search, $options: "i" }; // case-insensitive name match
+    } = req.query as {
+      page?: string
+      limit?: string
+      category?: string
+      ratings?: string
+      price?: string
+      search?: string
     }
 
+    const filter: any = {}
+
+    if (category && category !== "All") filter.category = category
+    if (ratings && Number(ratings) > 0)
+      filter.ratings = { $gte: Number(ratings) }
+    if (price && Number(price) > 0)
+      filter.price = { $lte: Number(price) }
+
+    if (search) {
+      filter.name = { $regex: search, $options: "i" } // case-insensitive search
+    }
+
+    const currentPage = Number(page)
+    const perPage = Number(limit)
+
     const products = await Product.find(filter)
-      .skip((+page - 1) * +limit)
-      .limit(+limit)
-      .sort({ createdAt: -1 });
+      .skip((currentPage - 1) * perPage)
+      .limit(perPage)
+      .sort({ createdAt: -1 })
 
-    const total = await Product.countDocuments(filter);
+    const total = await Product.countDocuments(filter)
 
-    res.status(200).json({ products, total });
+    res.status(200).json({ products, total })
   } catch (err) {
-    console.error("Get all products error:", err);
-    res.status(500).json({ message: "Failed to fetch products" });
+    console.error("Get all products error:", err)
+    res.status(500).json({ message: "Failed to fetch products" })
   }
-};
+}
 
-
-
-// 📌 PUBLIC: Get single product by ID
+// 📦 GET: Single Product by ID (Public)
 export const getProductById = async (req: Request, res: Response) => {
   try {
     const product = await Product.findById(req.params.id).populate("reviews.user", "name email")
@@ -52,11 +62,7 @@ export const getProductById = async (req: Request, res: Response) => {
   }
 }
 
-// 🔐 ADMIN: Create product
-import cloudinary from "../utils/cloudinary"
-
-// src/controllers/product.controller.ts
-
+// 📦 POST: Create Product (Admin)
 export const createProduct = async (req: Request, res: Response) => {
   try {
     const { name, description, price, category, stock } = req.body
@@ -91,7 +97,7 @@ export const createProduct = async (req: Request, res: Response) => {
       category,
       stock,
       images: imageUploads,
-      user: req.user._id, // comes from isAuthenticated middleware
+      user: req.user?._id, // comes from isAuthenticated middleware
     })
 
     await product.save()
@@ -102,8 +108,7 @@ export const createProduct = async (req: Request, res: Response) => {
   }
 }
 
-
-// 🔐 ADMIN: Update product
+// 📦 PUT: Update Product (Admin)
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const product = await Product.findById(req.params.id)
@@ -111,14 +116,12 @@ export const updateProduct = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Product not found" })
     }
 
-    // Update basic fields (convert string to number where needed)
     product.name = req.body.name || product.name
     product.description = req.body.description || product.description
     product.price = req.body.price ? Number(req.body.price) : product.price
     product.stock = req.body.stock ? Number(req.body.stock) : product.stock
     product.category = req.body.category || product.category
 
-    // Handle new image uploads
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
       const uploadedImages = await Promise.all(
         req.files.map((file) => {
@@ -134,8 +137,6 @@ export const updateProduct = async (req: Request, res: Response) => {
           })
         })
       )
-
-      // Replace the existing images with new ones
       product.images = uploadedImages
     }
 
@@ -147,7 +148,7 @@ export const updateProduct = async (req: Request, res: Response) => {
   }
 }
 
-// 🔐 ADMIN: Delete product
+// 📦 DELETE: Delete Product (Admin)
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const deleted = await Product.findByIdAndDelete(req.params.id)
@@ -159,9 +160,13 @@ export const deleteProduct = async (req: Request, res: Response) => {
   }
 }
 
-
-// GET /api/admin/products
-export const getProducts = async (req: Request, res: Response) => {
-  const products = await Product.find({}) // no limit
-  res.json({ products })
+// 📦 GET: All Products (Admin - no filter/limit)
+export const getProducts = async (_req: Request, res: Response) => {
+  try {
+    const products = await Product.find({}).sort({ createdAt: -1 })
+    res.json({ products })
+  } catch (err) {
+    console.error("Admin getProducts error:", err)
+    res.status(500).json({ message: "Failed to fetch all products" })
+  }
 }
