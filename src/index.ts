@@ -8,30 +8,44 @@ import routes from "./routes/index.routes"
 dotenv.config()
 const app = express()
 
-// TEMP Logger
+// ✅ TEMP Logger
 app.use((req, _, next) => {
   console.log(`📥 [${req.method}] ${req.originalUrl}`)
   next()
 })
 
-// ✅ CORS setup — change when deployed on Render
+// ✅ CORS Setup (Updated)
+
+
+const clientUrl = (process.env.CLIENT_URL || "").replace(/\/$/, "") // remove trailing slash
+const allowedOrigins = [clientUrl]
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:513",
+    origin: (origin, callback) => {
+      const normalizedOrigin = (origin || "").replace(/\/$/, "") // ✅ ensure string
+      if (!origin || allowedOrigins.includes(normalizedOrigin)) {
+        callback(null, origin)
+      } else {
+        callback(new Error("❌ Not allowed by CORS: " + origin))
+      }
+    },
     credentials: true,
   })
 )
 
-// Middleware
+
+
+// ✅ Middleware
 app.use(express.json({ limit: "10mb" }))
 app.use(cookieParser())
 
-// Routes
+// ✅ Routes
 app.use("/api", routes)
 
 // ✅ MongoDB + Server
 const PORT = process.env.PORT || 5000
-const MONGO_URI = `${process.env.MONGODB_URI}/${process.env.MONGODB_DB_NAME}`
+const MONGO_URI = `${process.env.MONGODB_URI}`
 
 mongoose
   .connect(MONGO_URI)
