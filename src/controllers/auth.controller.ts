@@ -2,6 +2,8 @@ import { Request, Response } from "express"
 import User from "../models/user.model"
 import { generateToken } from "../utils/jwt"
 import { OAuth2Client } from "google-auth-library"
+import crypto from "crypto"
+import { sendEmail } from "../utils/sendEmail"
 // import dotenv from "dotenv"
 // dotenv.config()
 
@@ -105,4 +107,103 @@ export const googleLogin = async (req: Request, res: Response) => {
 // ✅ Get logged-in user
 export const getMe = (req: Request, res: Response) => {
   res.json({ user: req.user })
+}
+
+
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  const { email } = req.body
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" })
+  }
+
+  const user = await User.findOne({ email })
+
+  if (!user) {
+    return res.status(404).json({ message: "User not found" })
+  }
+
+  // Generate reset token and hash it
+  const token = crypto.randomBytes(32).toString("hex")
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex")
+
+  user.resetPasswordToken = hashedToken
+  user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000) // ✅ Date instead of number
+  await user.save()
+
+  const resetUrl = `${process.env.CLIENT_URL}/reset-password/${token}`
+
+  const message = `
+    <p>Dear ${user.name},</p>
+
+    <p>We received a request to reset your password. You can reset it by clicking the button below:</p>
+
+    <p style="text-align: center;">
+      <a href="${resetUrl}" style="padding: 10px 20px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 5px;">
+        Reset Password
+      </a>
+    </p>
+
+    <p>If you're unable to click the button, copy and paste this URL into your browser:</p>
+    <p><a href="${resetUrl}">${resetUrl}</a></p>
+
+    <p><strong>Note:</strong> This link will expire in 10 minutes.</p>
+
+    <p>If you didn't request a password reset, please ignore this email. Your account remains secure.</p>
+
+    <p>Best regards,<br />Shopshere Support Team</p>
+  `
+
+  await sendEmail(user.email, "Reset Your Shopshere Password", message)
+
+  return res.status(200).json({ message: "Reset link sent to your email" })
+}
+
+// ✅ Reset Password
+export const resetPassword = async (req: Request, res: Response) => {
+  const { token } = req.params
+  const { password } = req.body
+
+  if (!password) {
+    return res.status(400).json({ message: "Password is required" })
+  }
+
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex")
+
+  const user = await User.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpires: { $gt: Date.now() },
+  })
+
+  if (!user) {
+    return res.status(400).json({ message: "Invalid or expired token" })
+  }
+
+  user.password = password
+  user.resetPasswordToken = undefined
+  user.resetPasswordExpires = undefined
+  await user.save()
+
+  return res.status(200).json({ message: "Password has been reset successfully" })
+}
+
+// ✅ Update Password (Logged-in users)
+export const updatePassword = async (req: Request, res: Response) => {
+  const { oldPassword, newPassword } = req.body
+
+  if (!oldPassword || !newPassword) {
+    return res.status(400).json({ message: "Both old and new passwords are required" })
+  }
+
+  const user = await User.findById(req.user.id).select("+password")
+
+  if (!user || !(await user.comparePassword?.(oldPassword))) {
+    return res.status(400).json({ message: "Incorrect old password" })
+  }
+
+  user.password = newPassword
+  await user.save()
+
+  return res.status(200).json({ message: "Password updated successfully" })
 }
