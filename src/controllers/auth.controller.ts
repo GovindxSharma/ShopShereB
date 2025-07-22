@@ -191,12 +191,18 @@ export const resetPassword = async (req: Request, res: Response) => {
 // ✅ Update Password (Logged-in users)
 export const updatePassword = async (req: Request, res: Response) => {
   const { oldPassword, newPassword } = req.body
+  
+  if (!req.user) {
+    return res.status(401).json({ message: "Login/Register" });
+  }
+
+  const userId = req.user._id;
 
   if (!oldPassword || !newPassword) {
     return res.status(400).json({ message: "Both old and new passwords are required" })
   }
-
-  const user = await User.findById(req.user.id).select("+password")
+ 
+  const user = await User.findById(userId).select("+password")
 
   if (!user || !(await user.comparePassword?.(oldPassword))) {
     return res.status(400).json({ message: "Incorrect old password" })
