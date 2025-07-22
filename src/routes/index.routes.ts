@@ -6,6 +6,7 @@ import paymentRoutes from "./payment.routes"
 import cartRoutes from "./cart.routes"
 import orderRoutes from "./order.routes"
 import reviewRoutes from "./review.routes"
+import adminRoutes from "./admin.routes"
 
 
 const router = Router()
@@ -16,6 +17,7 @@ router.use("/reviews", reviewRoutes)
 router.use("/payment", paymentRoutes)
 router.use("/cart", cartRoutes)
 router.use("/orders", orderRoutes)
+router.use("/admin", adminRoutes)
 
 
 export default router
