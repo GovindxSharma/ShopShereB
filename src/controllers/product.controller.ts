@@ -2,6 +2,20 @@ import { Request, Response } from "express"
 import Product from "../models/product.model"
 import cloudinary from "../utils/cloudinary"
 
+
+
+// 📦 GET: All Products (for client-side search with Fuse.js)
+export const getAllProductNames = async (_req: Request, res: Response) => {
+  try {
+    const products = await Product.find({}, "name category description price images"); // Only essential fields
+    res.status(200).json({ products });
+  } catch (err) {
+    console.error("Fetch all product names failed:", err);
+    res.status(500).json({ message: "Failed to get product names" });
+  }
+};
+
+
 // 📦 GET: All Products (Public)
 export const getAllProducts = async (req: Request, res: Response) => {
   try {
