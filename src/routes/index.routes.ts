@@ -7,6 +7,7 @@ import cartRoutes from "./cart.routes"
 import orderRoutes from "./order.routes"
 import reviewRoutes from "./review.routes"
 import adminRoutes from "./admin.routes"
+import { handleChatMessage } from "../controllers/chat.controller"
 
 
 const router = Router()
@@ -18,6 +19,7 @@ router.use("/payment", paymentRoutes)
 router.use("/cart", cartRoutes)
 router.use("/orders", orderRoutes)
 router.use("/admin", adminRoutes)
+router.post('/chat', handleChatMessage);
 
 
 export default router
