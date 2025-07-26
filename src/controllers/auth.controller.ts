@@ -134,10 +134,29 @@ export const forgotPassword = async (req: Request, res: Response) => {
   const resetUrl = `${process.env.CLIENT_URL}/reset-password/${token}`
 
   const message = `
-    <p>Dear ${user.name},</p>
-    <p>Reset using this link:</p>
-    <a href="${resetUrl}">${resetUrl}</a>
-  `
+  <div style="font-family: Arial, sans-serif; font-size: 15px; color: #333;">
+    <p>Hi ${user.name},</p>
+
+    <p>We received a request to reset the password for your Shopshere account. If you initiated this request, you can reset your password by clicking the button below:</p>
+
+    <p style="text-align: center; margin: 24px 0;">
+      <a href="${resetUrl}" style="background-color: #4f46e5; color: white; text-decoration: none; padding: 12px 24px; border-radius: 5px; font-weight: bold;">
+        Reset Password
+      </a>
+    </p>
+
+    <p>If the button above doesn’t work, you can also reset your password by copying and pasting the following link into your browser:</p>
+
+    <p style="word-break: break-all;"><a href="${resetUrl}">${resetUrl}</a></p>
+
+    <p><strong>Note:</strong> This password reset link will expire in 10 minutes.</p>
+
+    <p>If you didn’t request a password reset, please ignore this email. Your account remains secure.</p>
+
+    <p>Thanks,<br />The Shopshere Team</p>
+  </div>
+`
+
 
   try {
     await sendEmail(user.email, "Reset Your Shopshere Password", message)
