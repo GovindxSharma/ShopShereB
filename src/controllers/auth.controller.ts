@@ -124,41 +124,30 @@ export const forgotPassword = async (req: Request, res: Response) => {
     return res.status(404).json({ message: "User not found" })
   }
 
-  // Generate reset token and hash it
   const token = crypto.randomBytes(32).toString("hex")
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex")
 
   user.resetPasswordToken = hashedToken
-  user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000) // ✅ Date instead of number
+  user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000)
   await user.save()
 
   const resetUrl = `${process.env.CLIENT_URL}/reset-password/${token}`
 
   const message = `
     <p>Dear ${user.name},</p>
-
-    <p>We received a request to reset your password. You can reset it by clicking the button below:</p>
-
-    <p style="text-align: center;">
-      <a href="${resetUrl}" style="padding: 10px 20px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 5px;">
-        Reset Password
-      </a>
-    </p>
-
-    <p>If you're unable to click the button, copy and paste this URL into your browser:</p>
-    <p><a href="${resetUrl}">${resetUrl}</a></p>
-
-    <p><strong>Note:</strong> This link will expire in 10 minutes.</p>
-
-    <p>If you didn't request a password reset, please ignore this email. Your account remains secure.</p>
-
-    <p>Best regards,<br />Shopshere Support Team</p>
+    <p>Reset using this link:</p>
+    <a href="${resetUrl}">${resetUrl}</a>
   `
 
-  await sendEmail(user.email, "Reset Your Shopshere Password", message)
-
-  return res.status(200).json({ message: "Reset link sent to your email" })
+  try {
+    await sendEmail(user.email, "Reset Your Shopshere Password", message)
+    return res.status(200).json({ message: "Reset link sent to your email" })
+  } catch (error: any) {
+    console.error("Email sending failed:", error.message || error)
+    return res.status(500).json({ message: "Failed to send reset email" })
+  }
 }
+
 
 // ✅ Reset Password
 export const resetPassword = async (req: Request, res: Response) => {
