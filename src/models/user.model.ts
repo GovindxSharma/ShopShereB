@@ -6,8 +6,9 @@ export interface IUser extends Document {
   email: string
   password?: string
   avatar?: string
-  role: "user" | "admin"
+  role: "user" | "delivery" | "admin"
   provider: "local" | "google"
+  phone?: string
   resetPasswordToken?: string
   resetPasswordExpires?: Date
   comparePassword?(password: string): Promise<boolean>
@@ -19,8 +20,9 @@ const userSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true },
     password: { type: String },
     avatar: String,
-    role: { type: String, enum: ["user", "admin"], default: "user" },
+    role: { type: String, enum: ["user", "delivery", "admin"], default: "user" },
     provider: { type: String, enum: ["local", "google"], default: "local" },
+    phone: { type: String, default: "" },
 
     // 🔐 Added for password reset support
     resetPasswordToken: String,

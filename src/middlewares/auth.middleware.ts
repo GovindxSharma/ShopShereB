@@ -47,3 +47,11 @@ export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
     res.status(403).json({ message: "Admin access only" })
   }
 }
+
+export const isDeliveryOrAdmin = (req: Request, res: Response, next: NextFunction) => {
+  if (req.user?.role === "delivery" || req.user?.role === "admin") {
+    next()
+  } else {
+    res.status(403).json({ message: "Delivery Agent or Admin access required" })
+  }
+}

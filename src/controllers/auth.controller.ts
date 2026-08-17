@@ -29,19 +29,19 @@ const sanitizeUser = (user: any) => {
   return userObj
 }
 
-// ✅ Register
+// ✅ Register (Customer)
 export const register = async (req: Request, res: Response) => {
   const { name, email, password } = req.body
 
   const existing = await User.findOne({ email })
   if (existing) return res.status(400).json({ message: "Email already registered" })
 
-  const user = new User({ name, email, password, provider: "local" })
+  const user = new User({ name, email, password, provider: "local", role: "user" })
   await user.save()
 
   const token = generateToken(user)
   setAuthCookie(res, token)
-  res.json({ user: sanitizeUser(user) })
+  res.json({ user: sanitizeUser(user), token })
 }
 
 // ✅ Login
@@ -55,7 +55,7 @@ export const login = async (req: Request, res: Response) => {
 
   const token = generateToken(user)
   setAuthCookie(res, token)
-  res.json({ user: sanitizeUser(user) })
+  res.json({ user: sanitizeUser(user), token })
 }
 
 // ✅ Logout

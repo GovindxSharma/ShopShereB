@@ -2,21 +2,52 @@ import { Request, Response } from "express"
 import Product from "../models/product.model"
 import cloudinary from "../utils/cloudinary"
 
-
-
-// 📦 GET: All Products (for client-side search with Fuse.js)
+// 📦 GET: All Products (for client-side fast search with Fuse.js)
 export const getAllProductNames = async (_req: Request, res: Response) => {
   try {
-    const products = await Product.find({}, "name category description price images"); // Only essential fields
-    res.status(200).json({ products });
+    const products = await Product.find({}, "name category description price images ratings stock")
+    res.status(200).json({ products })
   } catch (err) {
-    console.error("Fetch all product names failed:", err);
-    res.status(500).json({ message: "Failed to get product names" });
+    console.error("Fetch all product names failed:", err)
+    res.status(500).json({ message: "Failed to get product names" })
   }
-};
+}
 
+// 📦 GET: All Unique Categories
+export const getCategories = async (_req: Request, res: Response) => {
+  try {
+    const categories = await Product.distinct("category")
+    res.status(200).json({ categories })
+  } catch (err) {
+    console.error("Fetch categories failed:", err)
+    res.status(500).json({ message: "Failed to get categories" })
+  }
+}
 
-// 📦 GET: All Products (Public)
+// 📦 GET: Related Products
+export const getRelatedProducts = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const currentProduct = await Product.findById(id)
+    if (!currentProduct) {
+      return res.status(404).json({ message: "Product not found" })
+    }
+
+    const related = await Product.find({
+      category: currentProduct.category,
+      _id: { $ne: currentProduct._id },
+    })
+      .limit(4)
+      .sort({ ratings: -1 })
+
+    res.status(200).json({ products: related })
+  } catch (err) {
+    console.error("Get related products error:", err)
+    res.status(500).json({ message: "Failed to fetch related products" })
+  }
+}
+
+// 📦 GET: All Products (Public, with Advanced Filters & Sorting)
 export const getAllProducts = async (req: Request, res: Response) => {
   try {
     const {
@@ -26,6 +57,7 @@ export const getAllProducts = async (req: Request, res: Response) => {
       ratings,
       price,
       search,
+      sort,
     } = req.query as {
       page?: string
       limit?: string
@@ -33,31 +65,58 @@ export const getAllProducts = async (req: Request, res: Response) => {
       ratings?: string
       price?: string
       search?: string
+      sort?: string
     }
 
     const filter: any = {}
 
-    if (category && category !== "All") filter.category = category
-    if (ratings && Number(ratings) > 0)
-      filter.ratings = { $gte: Number(ratings) }
-    if (price && Number(price) > 0)
-      filter.price = { $lte: Number(price) }
-
-    if (search) {
-      filter.name = { $regex: search, $options: "i" } // case-insensitive search
+    if (category && category !== "All" && category.trim() !== "") {
+      const catClean = category.trim().replace(/s$/, "")
+      filter.category = { $regex: new RegExp(`^${catClean}s?$`, "i") }
     }
 
-    const currentPage = Number(page)
-    const perPage = Number(limit)
+    if (ratings && Number(ratings) > 0) {
+      filter.ratings = { $gte: Number(ratings) }
+    }
+
+    if (price && Number(price) > 0) {
+      filter.price = { $lte: Number(price) }
+    }
+
+    if (search && search.trim() !== "") {
+      const searchRegex = { $regex: search.trim(), $options: "i" }
+      filter.$or = [
+        { name: searchRegex },
+        { description: searchRegex },
+        { category: searchRegex },
+      ]
+    }
+
+    // Sort order
+    let sortOptions: any = { createdAt: -1, _id: -1 }
+    if (sort === "price-asc" || sort === "price_asc") {
+      sortOptions = { price: 1, _id: -1 }
+    } else if (sort === "price-desc" || sort === "price_desc") {
+      sortOptions = { price: -1, _id: -1 }
+    } else if (sort === "rating" || sort === "ratings") {
+      sortOptions = { ratings: -1, numOfReviews: -1, _id: -1 }
+    } else if (sort === "popular") {
+      sortOptions = { numOfReviews: -1, ratings: -1, _id: -1 }
+    } else {
+      sortOptions = { createdAt: -1, _id: -1 }
+    }
+
+    const currentPage = Math.max(1, Number(page))
+    const perPage = Math.max(1, Number(limit))
 
     const products = await Product.find(filter)
+      .sort(sortOptions)
       .skip((currentPage - 1) * perPage)
       .limit(perPage)
-      .sort({ createdAt: -1 })
 
     const total = await Product.countDocuments(filter)
 
-    res.status(200).json({ products, total })
+    res.status(200).json({ products, total, page: currentPage, totalPages: Math.ceil(total / perPage) })
   } catch (err) {
     console.error("Get all products error:", err)
     res.status(500).json({ message: "Failed to fetch products" })
@@ -67,7 +126,7 @@ export const getAllProducts = async (req: Request, res: Response) => {
 // 📦 GET: Single Product by ID (Public)
 export const getProductById = async (req: Request, res: Response) => {
   try {
-    const product = await Product.findById(req.params.id).populate("reviews.user", "name email")
+    const product = await Product.findById(req.params.id).populate("reviews.user", "name email avatar")
     if (!product) return res.status(404).json({ message: "Product not found" })
     res.status(200).json(product)
   } catch (err) {
@@ -85,33 +144,42 @@ export const createProduct = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "All fields are required" })
     }
 
-    if (!req.files || !(req.files instanceof Array) || req.files.length === 0) {
-      return res.status(400).json({ message: "At least one image is required" })
-    }
+    let imageUploads: { public_id: string; url: string }[] = []
 
-    const imageUploads = await Promise.all(
-      req.files.map((file) => {
-        return new Promise<{ public_id: string; url: string }>((resolve, reject) => {
-          const uploadStream = cloudinary.uploader.upload_stream(
-            { folder: "shopshere/products" },
-            (error, result) => {
-              if (error || !result) return reject(error)
-              resolve({ public_id: result.public_id, url: result.secure_url })
-            }
-          )
-          uploadStream.end(file.buffer)
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      imageUploads = await Promise.all(
+        req.files.map((file) => {
+          return new Promise<{ public_id: string; url: string }>((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+              { folder: "shopshere/products" },
+              (error, result) => {
+                if (error || !result) return reject(error)
+                resolve({ public_id: result.public_id, url: result.secure_url })
+              }
+            )
+            uploadStream.end(file.buffer)
+          })
         })
-      })
-    )
+      )
+    } else if (req.body.imageUrl) {
+      imageUploads = [{ public_id: "custom_url", url: req.body.imageUrl }]
+    } else {
+      imageUploads = [
+        {
+          public_id: "default_product",
+          url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=1000&auto=format&fit=crop",
+        },
+      ]
+    }
 
     const product = new Product({
       name,
       description,
-      price,
+      price: Number(price),
       category,
-      stock,
+      stock: Number(stock),
       images: imageUploads,
-      user: req.user?._id, // comes from isAuthenticated middleware
+      user: req.user?._id,
     })
 
     await product.save()
@@ -122,7 +190,7 @@ export const createProduct = async (req: Request, res: Response) => {
   }
 }
 
-// 📦 PUT: Update Product (Admin)
+// 📦 PUT/PATCH: Update Product (Admin)
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const product = await Product.findById(req.params.id)
@@ -132,8 +200,8 @@ export const updateProduct = async (req: Request, res: Response) => {
 
     product.name = req.body.name || product.name
     product.description = req.body.description || product.description
-    product.price = req.body.price ? Number(req.body.price) : product.price
-    product.stock = req.body.stock ? Number(req.body.stock) : product.stock
+    product.price = req.body.price !== undefined ? Number(req.body.price) : product.price
+    product.stock = req.body.stock !== undefined ? Number(req.body.stock) : product.stock
     product.category = req.body.category || product.category
 
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {

@@ -54,9 +54,10 @@ export const addToCart = async (req: Request, res: Response) => {
   }
 
   const userId = req.user._id;
-  const { product, quantity } = req.body;
+  const productId = req.body.product || req.body.productId;
+  const quantity = Number(req.body.quantity) || 1;
 
-  const productExists = await Product.findById(product);
+  const productExists = await Product.findById(productId);
   if (!productExists) return res.status(400).json({ message: "Invalid product ID" });
   if (productExists.stock === 0) return res.status(400).json({ message: "Product is out of stock" });
   if (quantity > productExists.stock) return res.status(400).json({ message: `Only ${productExists.stock} in stock` });
@@ -64,15 +65,15 @@ export const addToCart = async (req: Request, res: Response) => {
   let cart = await Cart.findOne({ user: userId });
 
   if (!cart) {
-    cart = new Cart({ user: userId, items: [{ product, quantity }] });
+    cart = new Cart({ user: userId, items: [{ product: productId, quantity }] });
   } else {
-    const item = cart.items.find((i) => i.product.toString() === product);
+    const item = cart.items.find((i) => i.product.toString() === String(productId));
     if (item) {
       const newQty = item.quantity + quantity;
       if (newQty > productExists.stock) return res.status(400).json({ message: `Only ${productExists.stock} in stock` });
       item.quantity = newQty;
     } else {
-      cart.items.push({ product, quantity });
+      cart.items.push({ product: productId, quantity });
     }
   }
 

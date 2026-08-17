@@ -4,7 +4,7 @@ import User from "../models/user.model"
 // GET /api/admin/users
 export const getAllUsers = async (_: Request, res: Response) => {
   try {
-    const users = await User.find().select("-password")
+    const users = await User.find().select("-password").sort({ createdAt: -1 })
     const total = await User.countDocuments()
     res.status(200).json({ users, total })
   } catch (err) {

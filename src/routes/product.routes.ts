@@ -6,10 +6,11 @@ import {
   updateProduct,
   deleteProduct,
   getProducts,
-  getAllProductNames, // 👈 Add this import
+  getAllProductNames,
+  getCategories,
+  getRelatedProducts,
 } from "../controllers/product.controller"
-import { isAuthenticated } from "../middlewares/auth.middleware"
-import { isAdmin } from "../middlewares/auth.middleware"
+import { isAuthenticated, isAdmin } from "../middlewares/auth.middleware"
 import { upload } from "../middlewares/upload.middleware"
 
 const router = express.Router()
@@ -18,12 +19,15 @@ const router = express.Router()
 router.get("/admin", isAuthenticated, isAdmin, getProducts)
 
 // 🌐 Public routes
-router.get("/all", getAllProductNames) // 👈 NEW: for Fuse.js search
+router.get("/all", getAllProductNames) // For fast Fuse.js live client search
+router.get("/categories", getCategories) // All distinct categories
+router.get("/:id/related", getRelatedProducts) // Related products in same category
 router.get("/", getAllProducts)
 router.get("/:id", getProductById)
 
 // 🔐 Admin routes
 router.post("/", isAuthenticated, isAdmin, upload.array("images", 5), createProduct)
+router.put("/:id", isAuthenticated, isAdmin, upload.array("images", 5), updateProduct)
 router.patch("/:id", isAuthenticated, isAdmin, upload.array("images", 5), updateProduct)
 router.delete("/:id", isAuthenticated, isAdmin, deleteProduct)
 
