@@ -40,6 +40,29 @@ export const isAuthenticated = async (
   }
 }
 
+export const optionalAuth = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) => {
+  const token =
+    req.cookies?.token || req.header("Authorization")?.replace("Bearer ", "")
+
+  if (!token) {
+    req.user = undefined
+    return next()
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload
+    const user = await User.findById(decoded.id).select("-password")
+    req.user = user || undefined
+  } catch {
+    req.user = undefined
+  }
+  next()
+}
+
 export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
   if (req.user?.role === "admin") {
     next()

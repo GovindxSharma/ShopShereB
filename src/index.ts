@@ -52,7 +52,14 @@ app.use(
 )
 
 // 🛡️ Middlewares
-app.use(express.json({ limit: "10mb" }))
+app.use(
+  express.json({
+    limit: "10mb",
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf
+    },
+  })
+)
 app.use(cookieParser())
 
 // 🩺 Root & API Health Check Routes

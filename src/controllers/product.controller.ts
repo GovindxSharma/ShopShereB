@@ -1,12 +1,26 @@
 import { Request, Response } from "express"
 import Product from "../models/product.model"
 import cloudinary from "../utils/cloudinary"
+import { appCache } from "../utils/cache"
 
 // 📦 GET: All Products (for client-side fast search with Fuse.js)
 export const getAllProductNames = async (_req: Request, res: Response) => {
   try {
+    const cacheKey = "products:names"
+    const cached = appCache.get(cacheKey)
+    if (cached) {
+      res.setHeader("X-Cache", "HIT")
+      res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=300")
+      return res.status(200).json(cached)
+    }
+
     const products = await Product.find({}, "name category description price images ratings stock")
-    res.status(200).json({ products })
+    const responseData = { products }
+    appCache.set(cacheKey, responseData, 120)
+
+    res.setHeader("X-Cache", "MISS")
+    res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=300")
+    res.status(200).json(responseData)
   } catch (err) {
     console.error("Fetch all product names failed:", err)
     res.status(500).json({ message: "Failed to get product names" })
@@ -16,8 +30,21 @@ export const getAllProductNames = async (_req: Request, res: Response) => {
 // 📦 GET: All Unique Categories
 export const getCategories = async (_req: Request, res: Response) => {
   try {
+    const cacheKey = "categories:all"
+    const cached = appCache.get(cacheKey)
+    if (cached) {
+      res.setHeader("X-Cache", "HIT")
+      res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600")
+      return res.status(200).json(cached)
+    }
+
     const categories = await Product.distinct("category")
-    res.status(200).json({ categories })
+    const responseData = { categories }
+    appCache.set(cacheKey, responseData, 300)
+
+    res.setHeader("X-Cache", "MISS")
+    res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600")
+    res.status(200).json(responseData)
   } catch (err) {
     console.error("Fetch categories failed:", err)
     res.status(500).json({ message: "Failed to get categories" })
@@ -28,6 +55,14 @@ export const getCategories = async (_req: Request, res: Response) => {
 export const getRelatedProducts = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
+    const cacheKey = `products:related:${id}`
+    const cached = appCache.get(cacheKey)
+    if (cached) {
+      res.setHeader("X-Cache", "HIT")
+      res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=300")
+      return res.status(200).json(cached)
+    }
+
     const currentProduct = await Product.findById(id)
     if (!currentProduct) {
       return res.status(404).json({ message: "Product not found" })
@@ -40,7 +75,12 @@ export const getRelatedProducts = async (req: Request, res: Response) => {
       .limit(4)
       .sort({ ratings: -1 })
 
-    res.status(200).json({ products: related })
+    const responseData = { products: related }
+    appCache.set(cacheKey, responseData, 120)
+
+    res.setHeader("X-Cache", "MISS")
+    res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=300")
+    res.status(200).json(responseData)
   } catch (err) {
     console.error("Get related products error:", err)
     res.status(500).json({ message: "Failed to fetch related products" })
@@ -66,6 +106,15 @@ export const getAllProducts = async (req: Request, res: Response) => {
       price?: string
       search?: string
       sort?: string
+    }
+
+    // In-memory cache lookup
+    const cacheKey = `products:list:${JSON.stringify(req.query)}`
+    const cached = appCache.get(cacheKey)
+    if (cached) {
+      res.setHeader("X-Cache", "HIT")
+      res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120")
+      return res.status(200).json(cached)
     }
 
     const filter: any = {}
@@ -116,7 +165,19 @@ export const getAllProducts = async (req: Request, res: Response) => {
 
     const total = await Product.countDocuments(filter)
 
-    res.status(200).json({ products, total, page: currentPage, totalPages: Math.ceil(total / perPage) })
+    const responseData = {
+      products,
+      total,
+      page: currentPage,
+      totalPages: Math.ceil(total / perPage),
+    }
+
+    // Cache list result for 60 seconds
+    appCache.set(cacheKey, responseData, 60)
+
+    res.setHeader("X-Cache", "MISS")
+    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120")
+    res.status(200).json(responseData)
   } catch (err) {
     console.error("Get all products error:", err)
     res.status(500).json({ message: "Failed to fetch products" })
@@ -126,8 +187,21 @@ export const getAllProducts = async (req: Request, res: Response) => {
 // 📦 GET: Single Product by ID (Public)
 export const getProductById = async (req: Request, res: Response) => {
   try {
-    const product = await Product.findById(req.params.id).populate("reviews.user", "name email avatar")
+    const { id } = req.params
+    const cacheKey = `product:${id}`
+    const cached = appCache.get(cacheKey)
+    if (cached) {
+      res.setHeader("X-Cache", "HIT")
+      res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=300")
+      return res.status(200).json(cached)
+    }
+
+    const product = await Product.findById(id).populate("reviews.user", "name email avatar")
     if (!product) return res.status(404).json({ message: "Product not found" })
+
+    appCache.set(cacheKey, product, 120)
+    res.setHeader("X-Cache", "MISS")
+    res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=300")
     res.status(200).json(product)
   } catch (err) {
     console.error("Get product error:", err)
@@ -144,6 +218,17 @@ export const createProduct = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "All fields are required" })
     }
 
+    // Asynchronous Cloudinary pipeline: auto-format (WebP/AVIF), auto-quality compression, max 1200px
+    const CLOUDINARY_UPLOAD_OPTIONS = {
+      folder: "shopshere/products",
+      resource_type: "image" as const,
+      transformation: [
+        { width: 1200, crop: "limit" },
+        { quality: "auto" },
+        { fetch_format: "auto" },
+      ],
+    }
+
     let imageUploads: { public_id: string; url: string }[] = []
 
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
@@ -151,7 +236,7 @@ export const createProduct = async (req: Request, res: Response) => {
         req.files.map((file) => {
           return new Promise<{ public_id: string; url: string }>((resolve, reject) => {
             const uploadStream = cloudinary.uploader.upload_stream(
-              { folder: "shopshere/products" },
+              CLOUDINARY_UPLOAD_OPTIONS,
               (error, result) => {
                 if (error || !result) return reject(error)
                 resolve({ public_id: result.public_id, url: result.secure_url })
@@ -183,6 +268,11 @@ export const createProduct = async (req: Request, res: Response) => {
     })
 
     await product.save()
+
+    // ⚡ Purge cache
+    appCache.clearPrefix("products:")
+    appCache.clearPrefix("categories:")
+
     res.status(201).json(product)
   } catch (err) {
     console.error("Create product error:", err)
@@ -205,11 +295,20 @@ export const updateProduct = async (req: Request, res: Response) => {
     product.category = req.body.category || product.category
 
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      const oldImages = product.images || []
       const uploadedImages = await Promise.all(
         req.files.map((file) => {
           return new Promise<{ public_id: string; url: string }>((resolve, reject) => {
             const uploadStream = cloudinary.uploader.upload_stream(
-              { folder: "shopshere/products" },
+              {
+                folder: "shopshere/products",
+                resource_type: "image" as const,
+                transformation: [
+                  { width: 1200, crop: "limit" },
+                  { quality: "auto" },
+                  { fetch_format: "auto" },
+                ],
+              },
               (error, result) => {
                 if (error || !result) return reject(error)
                 resolve({ public_id: result.public_id, url: result.secure_url })
@@ -220,9 +319,24 @@ export const updateProduct = async (req: Request, res: Response) => {
         })
       )
       product.images = uploadedImages
+
+      // Asynchronously clean up old media from Cloudinary
+      for (const img of oldImages) {
+        if (img.public_id && !img.public_id.startsWith("http") && img.public_id !== "custom_url" && img.public_id !== "default_product") {
+          cloudinary.uploader.destroy(img.public_id).catch((err) => {
+            console.warn(`[Cloudinary] Failed to clean up replaced image ${img.public_id}:`, err)
+          })
+        }
+      }
     }
 
     await product.save()
+
+    // ⚡ Purge cache
+    appCache.clearPrefix("products:")
+    appCache.clearPrefix(`product:${req.params.id}`)
+    appCache.clearPrefix("categories:")
+
     res.status(200).json(product)
   } catch (err) {
     console.error("Update product error:", err)
@@ -235,6 +349,23 @@ export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const deleted = await Product.findByIdAndDelete(req.params.id)
     if (!deleted) return res.status(404).json({ message: "Product not found" })
+
+    // Asynchronously clean up deleted product images from Cloudinary pipeline
+    if (deleted.images && Array.isArray(deleted.images)) {
+      for (const img of deleted.images) {
+        if (img.public_id && !img.public_id.startsWith("http") && img.public_id !== "custom_url" && img.public_id !== "default_product") {
+          cloudinary.uploader.destroy(img.public_id).catch((err) => {
+            console.warn(`[Cloudinary] Failed to destroy image ${img.public_id}:`, err)
+          })
+        }
+      }
+    }
+
+    // ⚡ Purge cache
+    appCache.clearPrefix("products:")
+    appCache.clearPrefix(`product:${req.params.id}`)
+    appCache.clearPrefix("categories:")
+
     res.status(200).json({ message: "Product deleted successfully" })
   } catch (err) {
     console.error("Delete product error:", err)

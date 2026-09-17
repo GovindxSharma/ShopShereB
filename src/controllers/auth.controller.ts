@@ -104,9 +104,9 @@ export const googleLogin = async (req: Request, res: Response) => {
   }
 }
 
-// ✅ Get logged-in user
+// ✅ Get logged-in user (returns null if unauthenticated guest, avoiding 401 console error)
 export const getMe = (req: Request, res: Response) => {
-  res.json({ user: req.user })
+  res.status(200).json({ user: req.user || null })
 }
 
 
